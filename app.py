@@ -65,16 +65,17 @@ def conn():
 
 def init_db():
     c=conn()
+    # Create the current schema for a fresh install.
     c.executescript("""
     CREATE TABLE IF NOT EXISTS users(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL, phone TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL, salt TEXT NOT NULL,
+      password_hash TEXT, salt TEXT,
       role TEXT NOT NULL DEFAULT 'citizen',
       balance REAL NOT NULL DEFAULT 0,
       points INTEGER NOT NULL DEFAULT 0,
       kg REAL NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
+      created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS jobs(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +99,21 @@ def init_db():
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
     """)
+    # IMPORTANT: Streamlit may already have an older ecoearn.db from V1.
+    # Add missing columns instead of crashing on INSERT.
+    cols={row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()}
+    migrations=[
+        ("password_hash","TEXT"),
+        ("salt","TEXT"),
+        ("created_at","TEXT"),
+    ]
+    for col,typ in migrations:
+        if col not in cols:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
+    # Legacy accounts cannot be logged into without a password. They can be
+    # reset from the registration screen; new accounts work normally.
+    c.execute("UPDATE users SET created_at=? WHERE created_at IS NULL",
+              (datetime.now().isoformat(),))
     c.commit(); c.close()
 
 def q(sql,p=(),one=False):
@@ -113,6 +129,8 @@ def hash_password(password,salt=None):
     return h,salt
 
 def verify_password(password,h,salt):
+    if not h or not salt:
+        return False
     return secrets.compare_digest(hash_password(password,salt)[0],h)
 
 def current_user():
@@ -138,7 +156,28 @@ def auth_screen():
             user=q("SELECT * FROM users WHERE phone=?",(phone,),one=True)
             if user and verify_password(pw,user[3],user[4]):
                 st.session_state.user_id=user[0]; st.rerun()
-            else: st.error("Invalid mobile number or password.")
+            else:
+                st.error("Invalid mobile number or password. If this account was created in the older version, use Password Reset below.")
+
+        with st.expander("🔑 Password Reset / পুরোনো account reset"):
+            st.caption("Prototype reset: for production, use OTP verification before allowing a password reset.")
+            with st.form("reset_form"):
+                rphone=normalize_phone(st.text_input(t("phone"),key="reset_phone"))
+                npw=st.text_input("New password / নতুন পাসওয়ার্ড",type="password",key="new_pw")
+                cpw2=st.text_input("Confirm / নিশ্চিত করুন",type="password",key="new_cpw")
+                reset=st.form_submit_button("Reset password / পাসওয়ার্ড পরিবর্তন")
+            if reset:
+                u=q("SELECT id FROM users WHERE phone=?",(rphone,),one=True)
+                if not u:
+                    st.error("No account found for this mobile number.")
+                elif len(npw)<6:
+                    st.error("Password must contain at least 6 characters.")
+                elif npw!=cpw2:
+                    st.error("Passwords do not match.")
+                else:
+                    h,s=hash_password(npw)
+                    execute("UPDATE users SET password_hash=?,salt=? WHERE id=?",(h,s,u[0]))
+                    st.success("Password reset successfully. Please login.")
     with tab2:
         with st.form("register_form"):
             name=st.text_input(t("name"))

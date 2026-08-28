@@ -28,3 +28,9 @@ Never commit secrets to GitHub.
 ## Run
 pip install -r requirements.txt
 streamlit run app.py
+
+
+## Fix for the V1/V2 SQLite error
+If an older `ecoearn.db` already exists, V3 automatically adds the missing authentication columns. Existing legacy accounts may need a password reset from the Login screen. New registrations work normally.
+
+If you want a completely fresh prototype database, deleting `ecoearn.db` is also safe during development.

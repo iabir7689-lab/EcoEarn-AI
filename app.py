@@ -336,18 +336,30 @@ def collector():
     job=q("SELECT * FROM jobs WHERE id=?",(jid,),one=True)
     c1,c2=st.columns(2)
     with c1:
-        if st.button(t("accept"),use_container_width=True):
-            execute("UPDATE jobs SET status='Accepted',collector_id=? WHERE id=?",(u[0],jid)); st.rerun()
+        if job[6]=="Requested":
+            if st.button(t("accept"),use_container_width=True):
+                execute("UPDATE jobs SET status='Accepted',collector_id=? WHERE id=? AND status='Requested'",(u[0],jid)); st.rerun()
+        else:
+            st.info(f"Assigned collector ID: {job[2]}")
     with c2:
         if st.button(t("complete"),use_container_width=True):
-            if job[6]=="Accepted" and job[2] not in [None,u[0]]:
-                pass
-            uid,kg,val=job[1],job[4],job[5]
-            execute("UPDATE jobs SET status='Collected',collector_id=?,collected_at=? WHERE id=?",(u[0],datetime.now().isoformat(),jid))
-            execute("UPDATE users SET balance=balance+?,kg=kg+?,points=points+? WHERE id=?",(val,kg,int(kg*10),uid))
-            execute("INSERT INTO transactions(user_id,amount,kind,note,created_at) VALUES(?,?,?,?,?)",
-                    (uid,val,"credit","Verified waste collection",datetime.now().isoformat()))
-            st.success("Collection verified and wallet credited."); st.rerun()
+            if job[6] != "Accepted":
+                st.error("This job must be accepted before collection.")
+            elif job[2] != u[0]:
+                st.error("Only the assigned collector can complete this job.")
+            else:
+                uid,kg,val=job[1],job[4],job[5]
+                # Atomic state check prevents double-credit if two sessions click at once.
+                c=sqlite3.connect(DB_PATH); c.execute("PRAGMA foreign_keys=ON")
+                cur=c.execute("UPDATE jobs SET status='Collected',collected_at=? WHERE id=? AND status='Accepted' AND collector_id=?",(datetime.now().isoformat(),jid,u[0]))
+                if cur.rowcount != 1:
+                    c.rollback(); c.close(); st.error("This job was already completed or changed. Refresh and try again.")
+                else:
+                    c.execute("UPDATE users SET balance=balance+?,kg=kg+?,points=points+? WHERE id=?",(val,kg,int(kg*10),uid))
+                    c.execute("INSERT INTO transactions(user_id,amount,kind,note,created_at) VALUES(?,?,?,?,?)",
+                              (uid,val,"credit","Verified waste collection",datetime.now().isoformat()))
+                    c.commit(); c.close()
+                    st.success("Collection verified and wallet credited."); st.rerun()
 
 def dashboard():
     st.markdown("## 🏛️ "+t("admin_title"))

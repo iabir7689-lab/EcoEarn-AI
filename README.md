@@ -1,36 +1,41 @@
-# EcoEarn AI v2
-Python + Streamlit prototype for Bangladesh.
+# ♻️ EcoEarn AI — Proper Streamlit Build
 
-## New in v2
-- Separate registration and login
-- Individual account with hashed password
-- Citizen / Collector roles
-- Session-based authentication
-- Persistent SQLite users, jobs, scans and transactions
-- Bangla + English
-- Working navigation and forms
-- Camera/upload waste scan
-- AI waste classification when HF_TOKEN is configured
-- AI-generated image screening when HF_TOKEN is configured
-- Conservative uncertainty handling
-- Collector accept/complete workflow
-- Wallet and EcoPoints
-- Admin dashboard
+Bangladesh-focused AI waste-to-income prototype.
 
-## Streamlit Secrets
-Optional:
+## Working modules
+- Individual registration/login
+- Secure password hashing
+- Citizen and Collector roles
+- Session-based access control
+- Bangla + English UI
+- Upload + live camera
+- AI waste classification hook
+- AI-generated image screening hook
+- Duplicate-image protection
+- Pickup requests
+- Collector accept → assigned collector → complete workflow
+- Atomic collection credit to prevent double payment
+- Wallet + transaction ledger
+- EcoPoints + leaderboard
+- Waste market rates
+- Profile + password change
+- Restricted admin dashboard
+- Waste statistics + map
+
+## Fixes over earlier build
+The registration/database error is handled by schema initialization and migration. The collector workflow now prevents another collector from taking an accepted job and prevents double-credit on completion.
+
+## Streamlit Cloud
+Deploy `app.py` from GitHub. Add optional secrets in App Settings → Secrets:
+
 ```toml
 HF_TOKEN = "hf_xxx"
 AI_DETECTOR_MODEL = "dima806/ai-generated-image-detection"
+# Optional custom classifier:
+# WASTE_MODEL = "your-model-id"
 ```
-Never commit secrets to GitHub.
 
-## Run
-pip install -r requirements.txt
-streamlit run app.py
+## Important production architecture
+SQLite is fine for a prototype, but Streamlit Cloud local storage is not a durable production database. For a real public launch with persistent accounts, migrate users/jobs/wallets to Supabase/PostgreSQL and add OTP, GPS/time verification, collector QR/ID verification, audit logs and official bKash/Nagad/Rocket APIs.
 
-
-## Fix for the V1/V2 SQLite error
-If an older `ecoearn.db` already exists, V3 automatically adds the missing authentication columns. Existing legacy accounts may need a password reset from the Login screen. New registrations work normally.
-
-If you want a completely fresh prototype database, deleting `ecoearn.db` is also safe during development.
+Never put API keys or passwords in GitHub.
